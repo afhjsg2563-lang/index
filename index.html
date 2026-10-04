@@ -3,1201 +3,923 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>منظومة إدارة وتصدير عروض الأسعار الداخلي</title>
-
-    <!-- Tailwind CSS CDN -->
+    <title>منظومة إدارة وتصدير عروض الأسعار السحابية</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
     <!-- Google Fonts (Cairo) -->
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
-
-    <!-- html2pdf.js for PDF Export -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <!-- html2pdf for PDF export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-
-    <!-- SheetJS (xlsx) for Genuine Excel Export -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-
-    <!-- SweetAlert2 for Modals and Password Prompts -->
+    <!-- XLSX / SheetJS for Excel Export -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- SweetAlert2 -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        brand: {
-                            50: '#f0f9ff',
-                            100: '#e0f2fe',
-                            500: '#0284c7',
-                            600: '#0369a1',
-                            700: '#035480',
-                            800: '#075985',
-                            900: '#0c4a6e',
-                        }
-                    },
-                    fontFamily: {
-                        cairo: ['Cairo', 'sans-serif']
-                    }
-                }
-            }
-        }
-    </script>
+    <!-- Firebase SDK (Version 9 Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 
     <style>
         body {
             font-family: 'Cairo', sans-serif;
-            background-color: #f8fafc;
+            background-color: #f1f5f9;
         }
-
-        /* Printable / PDF Specific Styles */
+        .tab-active {
+            border-bottom: 3px solid #2563eb;
+            color: #2563eb;
+            font-weight: 700;
+        }
         @media print {
             .no-print { display: none !important; }
             .print-only { display: block !important; }
             body { background: white; }
-            .shadow-xl, .shadow-md, .shadow-sm { box-shadow: none !important; }
-            .border { border-color: #e2e8f0 !important; }
-        }
-
-        /* Scrollbar Styling */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #f1f5f9;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
         }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen pb-16">
+<body class="text-slate-800 min-h-screen flex flex-col">
 
-    <!-- Navigation Header -->
-    <header class="bg-slate-900 text-white shadow-xl sticky top-0 z-30 no-print">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <!-- Navbar -->
+    <header class="bg-slate-900 text-white shadow-md no-print sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
             <div class="flex items-center space-x-3 space-x-reverse">
-                <div class="bg-brand-600 p-2.5 rounded-xl text-white shadow-md">
+                <div class="bg-blue-600 p-2 rounded-lg">
                     <i class="fa-solid fa-file-invoice-dollar text-xl"></i>
                 </div>
                 <div>
-                    <h1 class="font-extrabold text-base sm:text-lg leading-tight tracking-wide">منظومة إدارة وتصدير عروض الأسعار</h1>
-                    <p class="text-[11px] text-slate-400">إدارة العروض، التحليلات، وإدارة الشركات ببياناتك الحقيقية</p>
+                    <h1 class="text-xl font-bold">إدارة عروض الأسعار السحابية</h1>
+                    <p class="text-xs text-slate-400">مزامنة سحابية لحظية مع Firebase</p>
                 </div>
+            </div>
+
+            <!-- Sync Indicator -->
+            <div id="syncStatus" class="flex items-center space-x-2 space-x-reverse text-xs bg-slate-800 px-3 py-1.5 rounded-full border border-slate-700">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" id="statusDot"></span>
+                <span id="statusText" class="text-slate-300">جاري الاتصال بالسحابة...</span>
             </div>
 
             <!-- Navigation Tabs -->
-            <div class="flex items-center gap-1.5 sm:gap-2">
-                <button onclick="switchTab('editor')" id="tab-editor-btn" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition bg-brand-600 text-white shadow">
-                    <i class="fa-solid fa-pen-to-square ml-1.5"></i><span class="hidden sm:inline">إنشاء </span>عرض سعر
+            <nav class="flex space-x-1 space-x-reverse bg-slate-800 p-1 rounded-xl text-sm font-medium">
+                <button onclick="switchTab('create')" id="tab-create" class="px-4 py-2 rounded-lg tab-active transition-all">
+                    <i class="fa-solid fa-plus-circle ml-1"></i> عرض سعر جديد
                 </button>
-                <button onclick="switchTab('dashboard')" id="tab-dashboard-btn" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition bg-slate-800 hover:bg-slate-700 text-slate-300">
-                    <i class="fa-solid fa-chart-pie ml-1.5"></i>لوحة التحكم
+                <button onclick="switchTab('dashboard')" id="tab-dashboard" class="px-4 py-2 rounded-lg text-slate-400 hover:text-white transition-all">
+                    <i class="fa-solid fa-chart-pie ml-1"></i> لوحة التحكم
                 </button>
-                <button onclick="switchTab('history')" id="tab-history-btn" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition bg-slate-800 hover:bg-slate-700 text-slate-300">
-                    <i class="fa-solid fa-table ml-1.5"></i>سجل العروض (<span id="history-count">0</span>)
+                <button onclick="switchTab('ledger')" id="tab-ledger" class="px-4 py-2 rounded-lg text-slate-400 hover:text-white transition-all">
+                    <i class="fa-solid fa-table-list ml-1"></i> سجل الفواتير
                 </button>
-                <button onclick="switchTab('companies')" id="tab-companies-btn" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition bg-slate-800 hover:bg-slate-700 text-slate-300">
-                    <i class="fa-solid fa-building ml-1.5"></i>الشركات (<span id="companies-count">0</span>)
+                <button onclick="switchTab('companies')" id="tab-companies" class="px-4 py-2 rounded-lg text-slate-400 hover:text-white transition-all">
+                    <i class="fa-solid fa-building ml-1"></i> دليل الشركات
                 </button>
-            </div>
+            </nav>
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+    <!-- Main Content Container -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-grow w-full">
 
-        <!-- TAB 1: QUOTATION EDITOR (PRIMARY VIEW) -->
-        <div id="tab-editor" class="space-y-6">
+        <!-- TAB 1: CREATE QUOTATION -->
+        <section id="sec-create" class="space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Form Area -->
+                <div class="lg:col-span-7 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 class="text-lg font-bold text-slate-800 mb-4 pb-2 border-b flex justify-between items-center">
+                        <span><i class="fa-solid fa-pen-to-square text-blue-600 ml-2"></i>إعداد بيانات عرض السعر</span>
+                        <span id="editBadge" class="hidden bg-amber-100 text-amber-800 text-xs px-2.5 py-1 rounded-full font-semibold">وضع التعديل</span>
+                    </h2>
 
-            <!-- Control Action Bar -->
-            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4 no-print">
-                <div class="flex items-center gap-2">
-                    <span class="inline-flex items-center justify-center bg-blue-50 text-blue-700 text-xs font-bold px-3 py-1.5 rounded-full border border-blue-200">
-                        <i class="fa-solid fa-pen-nib ml-1.5"></i>محرر عروض الأسعار
-                    </span>
-                    <p class="text-xs text-slate-500 hidden md:inline">قم بتعديل الأصناف والأسعار وتنزيل الفاتورة مباشرة</p>
-                </div>
-
-                <div class="flex flex-wrap items-center gap-2">
-                    <button onclick="resetQuotationForm()" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-bold rounded-xl transition flex items-center">
-                        <i class="fa-solid fa-rotate-right ml-1.5"></i>إعادة ضبط
-                    </button>
-                    <button onclick="saveQuotationToLedger()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm transition flex items-center">
-                        <i class="fa-solid fa-floppy-disk ml-1.5"></i>تسجيل بالسجل
-                    </button>
-                    <button onclick="exportSingleQuotationExcel()" class="px-3.5 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm transition flex items-center">
-                        <i class="fa-solid fa-file-excel ml-1.5"></i>تنزيل عرض Excel
-                    </button>
-                    <button onclick="exportQuotationPDF()" class="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm transition flex items-center">
-                        <i class="fa-solid fa-file-pdf ml-1.5"></i>تنزيل عرض PDF
-                    </button>
-                </div>
-            </div>
-
-            <!-- PDF Template Render Area -->
-            <div id="pdf-container" class="bg-white rounded-2xl shadow-md border border-slate-200 p-6 sm:p-8 transition-all">
-
-                <!-- My Company Header Info -->
-                <div class="border-b border-slate-200 pb-6 mb-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-
-                        <!-- Supplier Company Data Input / Display -->
-                        <div class="space-y-2">
-                            <div class="flex items-center space-x-2 space-x-reverse">
-                                <div class="w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center font-bold text-xl shadow-sm">
-                                    <i class="fa-solid fa-building-flag"></i>
-                                </div>
-                                <input type="text" id="my-company-name" placeholder="اسم شركتك المُصنعة / الموردة" class="text-base sm:text-lg font-black text-slate-800 border-b border-dashed border-slate-300 focus:border-brand-500 focus:outline-none w-full bg-transparent px-1 py-0.5">
-                            </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-600 pt-1">
-                                <input type="text" id="my-company-cr" placeholder="رقم السجل التجاري لشركتك" class="border-b border-slate-200 bg-transparent py-0.5 outline-none focus:border-brand-500">
-                                <input type="text" id="my-company-tax" placeholder="الرقم الضريبي لشركتك" class="border-b border-slate-200 bg-transparent py-0.5 outline-none focus:border-brand-500">
-                                <input type="text" id="my-company-phone" placeholder="رقم الهاتف للتواصل" class="border-b border-slate-200 bg-transparent py-0.5 outline-none focus:border-brand-500">
-                                <input type="text" id="my-company-address" placeholder="عنوان الشركة" class="border-b border-slate-200 bg-transparent py-0.5 outline-none focus:border-brand-500">
-                            </div>
-                        </div>
-
-                        <!-- Invoice Number and Date Controls -->
-                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2.5">
-                            <div class="flex justify-between items-center">
-                                <span class="text-xs font-bold text-slate-600">رقم عرض السعر:</span>
-                                <input type="text" id="invoice-number" class="font-mono font-bold text-brand-700 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-left w-36 text-xs focus:ring-1 focus:ring-brand-500 outline-none">
-                            </div>
-                            <div class="flex justify-between items-center">
-                                <span class="text-xs font-bold text-slate-600">تاريخ الإصدار:</span>
-                                <input type="date" id="invoice-date" class="text-xs font-semibold bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-slate-700 focus:ring-1 focus:ring-brand-500 outline-none">
-                            </div>
-                            <div class="flex justify-between items-center">
-                                <span class="text-xs font-bold text-slate-600">تاريخ الصلاحية:</span>
-                                <input type="text" id="validity-period" value="صالح لمدة 15 يوماً من تاريخه" class="text-xs font-semibold bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-slate-700 focus:ring-1 focus:ring-brand-500 outline-none w-48 text-left">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Targeted Client Company Selection Section -->
-                <div class="mb-8 bg-gradient-to-r from-slate-50 to-blue-50/40 p-5 rounded-xl border border-slate-200/80">
-                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-                        <h3 class="font-bold text-slate-800 text-sm flex items-center">
-                            <i class="fa-solid fa-user-tie text-brand-600 ml-2"></i>بيانات الشركة / العميل المستهدف
-                        </h3>
-
-                        <!-- Registered Companies Dropdown -->
-                        <div class="no-print flex items-center gap-2">
-                            <label for="company-select" class="text-xs text-slate-600 font-bold">اختر شركة من القائمة:</label>
-                            <select id="company-select" onchange="onSelectCompanyFromDropdown(this.value)" class="text-xs bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-brand-500 outline-none text-slate-700 font-bold">
-                                <option value="">-- اختر شركة مسجلة --</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 mb-1">اسم الشركة / العميل</label>
-                            <input type="text" id="client-name" placeholder="أدخل اسم العميل أو حدد شركة" class="w-full text-xs sm:text-sm font-bold bg-white border border-slate-300 rounded-lg p-2 focus:ring-1 focus:ring-brand-500 outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 mb-1">السجل التجاري (CR)</label>
-                            <input type="text" id="client-cr" placeholder="رقم السجل التجاري" class="w-full text-xs sm:text-sm bg-white border border-slate-300 rounded-lg p-2 focus:ring-1 focus:ring-brand-500 outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 mb-1">الرقم / الملف الضريبي (Tax ID)</label>
-                            <input type="text" id="client-tax" placeholder="الرقم الضريبي للعميل" class="w-full text-xs sm:text-sm bg-white border border-slate-300 rounded-lg p-2 focus:ring-1 focus:ring-brand-500 outline-none">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Products & Items Table -->
-                <div class="mb-8 overflow-x-auto">
-                    <table class="w-full text-right border-collapse">
-                        <thead>
-                            <tr class="bg-slate-900 text-white text-xs font-bold uppercase">
-                                <th class="p-3 rounded-r-lg w-10 text-center">#</th>
-                                <th class="p-3">بيان الخامات / المنتجات / الخدمات</th>
-                                <th class="p-3 w-28 text-center">العدد / الكمية</th>
-                                <th class="p-3 w-32 text-center">سعر الوحدة</th>
-                                <th class="p-3 w-36 text-left">الإجمالي</th>
-                                <th class="p-3 w-12 text-center no-print">حذف</th>
-                            </tr>
-                        </thead>
-                        <tbody id="items-table-body" class="divide-y divide-slate-200 text-xs sm:text-sm">
-                            <!-- Rows generated via JS -->
-                        </tbody>
-                    </table>
-
-                    <div class="mt-3 no-print">
-                        <button onclick="addNewRow()" class="px-4 py-2 bg-slate-100 hover:bg-brand-50 text-brand-700 border border-slate-300 border-dashed rounded-xl font-bold text-xs transition flex items-center justify-center w-full sm:w-auto">
-                            <i class="fa-solid fa-plus ml-2"></i>إضافة صنف / خامة جديد
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Totals & Tax Logic Section -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-end border-t border-slate-200 pt-6">
-
-                    <!-- Tax Conditions & Dynamic Note -->
-                    <div class="bg-amber-50/70 border border-amber-200 p-4 rounded-xl space-y-2">
-                        <div class="flex items-center text-amber-800 font-bold text-xs uppercase">
-                            <i class="fa-solid fa-shield-halved ml-1.5 text-amber-600"></i>ملاحظة الضريبة والإجمالي:
-                        </div>
-                        <p id="tax-summary-note" class="text-xs sm:text-sm font-bold text-amber-900 leading-relaxed">
-                            --
-                        </p>
-                        <p class="text-[11px] text-slate-500 pt-1 border-t border-amber-200/60">
-                            • الأسعار المقدمة خاضعة للدفعة التنسيقية والشروط المعتمدة.
-                        </p>
-                    </div>
-
-                    <!-- Totals Box -->
-                    <div class="bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-3">
-
-                        <!-- Subtotal -->
-                        <div class="flex justify-between items-center text-xs sm:text-sm">
-                            <span class="text-slate-600 font-bold">المجموع الفرعي (قبل الضريبة):</span>
-                            <span id="subtotal-val" class="font-bold text-slate-900 font-mono text-base">0.00</span>
-                        </div>
-
-                        <!-- Tax Selection & Input -->
-                        <div class="flex justify-between items-center gap-2 py-2 border-y border-slate-200">
-                            <div class="flex items-center gap-1.5">
-                                <span class="text-xs sm:text-sm font-bold text-slate-700">نسبة الضريبة / الإضافة:</span>
-                                <select id="tax-preset" onchange="applyTaxPreset(this.value)" class="text-xs bg-white border border-slate-300 rounded-lg px-2 py-1 outline-none no-print">
-                                    <option value="14">14% (قيمة مضافة)</option>
-                                    <option value="21">21% (ضريبة مخصصة)</option>
-                                    <option value="0">0% (بدون ضريبة)</option>
-                                    <option value="custom">نسبة مخصصة...</option>
+                    <form id="quoteForm" onsubmit="event.preventDefault();" class="space-y-4">
+                        <!-- Company Selection -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-600 mb-1">الشركة المصدرة (بياناتك):</label>
+                                <select id="myCompanySelect" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500">
+                                    <option value="">-- اختر شركتك --</option>
                                 </select>
                             </div>
-
-                            <div class="flex items-center gap-1">
-                                <input type="number" id="tax-rate-input" min="0" max="100" value="14" oninput="calculateTotals()" class="w-16 text-center text-xs sm:text-sm font-bold bg-white border border-slate-300 rounded-lg p-1 outline-none focus:ring-1 focus:ring-brand-500">
-                                <span class="text-xs sm:text-sm font-bold text-slate-600">%</span>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-600 mb-1">الشركة العميل (المستلم):</label>
+                                <select id="clientCompanySelect" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500">
+                                    <option value="">-- اختر شركة العميل --</option>
+                                </select>
                             </div>
                         </div>
 
-                        <!-- Tax Calculated Amount -->
-                        <div class="flex justify-between items-center text-xs sm:text-sm">
-                            <span class="text-slate-600 font-bold">قيمة الضريبة المضافة:</span>
-                            <span id="tax-amount-val" class="font-bold text-slate-700 font-mono">0.00</span>
+                        <!-- Date & Tax Settings -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-600 mb-1">تاريخ العرض:</label>
+                                <input type="date" id="quoteDate" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-600 mb-1">نسبة الضريبة (%):</label>
+                                <input type="number" id="taxRate" value="14" min="0" max="100" class="w-full border border-slate-300 rounded-lg p-2 text-sm" oninput="calculateTotals()">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-600 mb-1">رقم العرض / الفاتورة:</label>
+                                <input type="text" id="quoteNumber" placeholder="تلقائي..." class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-slate-100" readonly>
+                            </div>
                         </div>
 
-                        <!-- Grand Total -->
-                        <div class="flex justify-between items-center text-base sm:text-lg font-black bg-brand-600 text-white p-3 rounded-xl shadow-sm">
-                            <span>الإجمالي النهائي بالفاتورة:</span>
-                            <span id="grand-total-val" class="font-mono text-xl">0.00</span>
+                        <!-- Items Table Input -->
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="block text-xs font-bold text-slate-600">بنود عرض السعر (الخامات / المنتجات):</label>
+                                <button type="button" onclick="addItemRow()" class="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-100 font-bold border border-blue-200">
+                                    <i class="fa-solid fa-plus ml-1"></i> إضافة بند
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-right text-xs">
+                                    <thead>
+                                        <tr class="bg-slate-100 text-slate-700">
+                                            <th class="p-2 rounded-r-lg">البيان / الخامة</th>
+                                            <th class="p-2 w-20">العدد</th>
+                                            <th class="p-2 w-28">السعر الفردي</th>
+                                            <th class="p-2 w-28">الإجمالي</th>
+                                            <th class="p-2 rounded-l-lg text-center w-12">حذف</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="itemsTableBody">
+                                        <!-- Rows injected dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Calculations Summary Bar -->
+                        <div class="bg-slate-900 text-white p-4 rounded-xl space-y-2 text-sm">
+                            <div class="flex justify-between text-slate-300">
+                                <span>المجموع قبل الضريبة:</span>
+                                <span id="subTotalVal" class="font-bold">0.00 ج.م</span>
+                            </div>
+                            <div class="flex justify-between text-slate-300">
+                                <span id="taxLabelVal">قيمة الضريبة (14%):</span>
+                                <span id="taxAmountVal" class="font-bold">0.00 ج.م</span>
+                            </div>
+                            <div class="flex justify-between text-lg font-extrabold text-amber-400 border-t border-slate-800 pt-2">
+                                <span>الإجمالي النهائي:</span>
+                                <span id="grandTotalVal">0.00 ج.م</span>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex flex-wrap gap-2 pt-2">
+                            <button type="button" onclick="saveAndGenerate('pdf')" class="flex-1 bg-emerald-600 text-white py-3 rounded-xl hover:bg-emerald-700 font-bold text-sm shadow-md flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-file-pdf"></i> حفظ وتنزيل (PDF)
+                            </button>
+                            <button type="button" onclick="saveAndGenerate('excel')" class="flex-1 bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 font-bold text-sm shadow-md flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-file-excel"></i> حفظ وتنزيل (Excel)
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Live Preview Area -->
+                <div class="lg:col-span-5">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 sticky top-20">
+                        <h3 class="text-sm font-bold text-slate-500 mb-3 flex items-center justify-between">
+                            <span><i class="fa-solid fa-eye ml-1"></i> المعاينة المباشرة لعرض السعر</span>
+                            <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">A4 PDF Preview</span>
+                        </h3>
+                        
+                        <!-- Document Render -->
+                        <div id="pdfDocument" class="bg-white border p-6 text-slate-900 text-xs shadow-inner rounded-lg space-y-4">
+                            <!-- Header -->
+                            <div class="flex justify-between items-start border-b pb-3">
+                                <div>
+                                    <h2 id="prevMyName" class="text-base font-extrabold text-blue-900">اسم شركتك</h2>
+                                    <p id="prevMyCR" class="text-[10px] text-slate-500">سجل تجاري: -</p>
+                                    <p id="prevMyTax" class="text-[10px] text-slate-500">ملف ضريبي: -</p>
+                                </div>
+                                <div class="text-left">
+                                    <span class="inline-block bg-blue-900 text-white px-2 py-1 font-bold text-xs rounded mb-1">عرض سعر</span>
+                                    <p id="prevQuoteNum" class="text-[10px] font-bold text-slate-600">رقم: -</p>
+                                    <p id="prevQuoteDate" class="text-[10px] text-slate-500">التاريخ: -</p>
+                                </div>
+                            </div>
+
+                            <!-- Client Info -->
+                            <div class="bg-slate-50 p-2.5 rounded border border-slate-100">
+                                <p class="text-[10px] text-slate-400 font-bold mb-0.5">الموجه إلى السيد / الشركة:</p>
+                                <p id="prevClientName" class="font-bold text-slate-800 text-sm">اسم الشركة العميل</p>
+                                <p id="prevClientTax" class="text-[10px] text-slate-500">الملف الضريبي: -</p>
+                            </div>
+
+                            <!-- Items Table -->
+                            <table class="w-full text-right border-collapse">
+                                <thead>
+                                    <tr class="bg-blue-900 text-white text-[10px]">
+                                        <th class="p-1.5 border">البيان / الخامات</th>
+                                        <th class="p-1.5 border text-center">العدد</th>
+                                        <th class="p-1.5 border text-center">السعر</th>
+                                        <th class="p-1.5 border text-left">الإجمالي</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="prevItemsBody">
+                                    <tr><td colspan="4" class="text-center p-3 text-slate-400">لم يتم إضافة بنود بعد</td></tr>
+                                </tbody>
+                            </table>
+
+                            <!-- Totals -->
+                            <div class="space-y-1 text-left border-t pt-2 text-[11px]">
+                                <div class="flex justify-between"><span>المجموع:</span><span id="prevSubtotal" class="font-bold">0.00</span></div>
+                                <div class="flex justify-between text-slate-600"><span id="prevTaxText">الضريبة (14%):</span><span id="prevTaxVal">0.00</span></div>
+                                <div class="flex justify-between text-sm font-extrabold text-blue-900 border-t pt-1"><span>الإجمالي النهائي:</span><span id="prevGrandTotal">0.00 ج.م</span></div>
+                            </div>
+
+                            <!-- Tax Note Clause -->
+                            <p id="prevTaxNote" class="text-[9px] text-slate-400 italic text-center border-t pt-2">
+                                تم إضافة ضريبة القيمة المضافة بقيمة 14% وفقاً للائحة التنفيذية.
+                            </p>
                         </div>
                     </div>
                 </div>
-
-                <!-- Footer Signatures for PDF -->
-                <div class="mt-12 pt-6 border-t border-slate-200 grid grid-cols-2 text-center text-xs text-slate-500">
-                    <div>
-                        <p class="font-bold text-slate-700 mb-8">إعداد / قسم المبيعات</p>
-                        <p class="border-b border-dashed border-slate-300 w-32 mx-auto"></p>
-                    </div>
-                    <div>
-                        <p class="font-bold text-slate-700 mb-8">يعتمد / الإدارة العامة</p>
-                        <p class="border-b border-dashed border-slate-300 w-32 mx-auto"></p>
-                    </div>
-                </div>
-
             </div>
-        </div>
+        </section>
 
-        <!-- TAB 2: DASHBOARD OVERVIEW PAGE -->
-        <div id="tab-dashboard" class="hidden space-y-6">
+        <!-- TAB 2: DASHBOARD PAGE -->
+        <section id="sec-dashboard" class="space-y-6 hidden">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-extrabold text-slate-800"><i class="fa-solid fa-chart-pie text-blue-600 ml-2"></i>لوحة التحليلات والإحصائيات</h2>
+                <span class="text-xs text-slate-500">بيانات فورية من قاعدة البيانات السحابية</span>
+            </div>
 
-            <!-- Metrics Summary Cards -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <!-- Total Revenue -->
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+            <!-- Top Metric Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4 space-x-reverse">
+                    <div class="bg-blue-100 text-blue-600 p-3 rounded-xl"><i class="fa-solid fa-receipt text-2xl"></i></div>
                     <div>
-                        <p class="text-xs font-bold text-slate-500 mb-1">إجمالي مبالغ العروض</p>
-                        <h3 id="dash-total-revenue" class="text-2xl font-black text-slate-900 font-mono">0.00</h3>
-                        <p class="text-[11px] text-emerald-600 font-semibold mt-1"><i class="fa-solid fa-arrow-trend-up ml-1"></i>شامل كافة الضرائب</p>
-                    </div>
-                    <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
-                        <i class="fa-solid fa-sack-dollar"></i>
+                        <p class="text-xs text-slate-500 font-bold">إجمالي عدد الفواتير</p>
+                        <h3 id="dashTotalQuotes" class="text-2xl font-black text-slate-800">0</h3>
                     </div>
                 </div>
-
-                <!-- Total Quotes Count -->
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4 space-x-reverse">
+                    <div class="bg-emerald-100 text-emerald-600 p-3 rounded-xl"><i class="fa-solid fa-vault text-2xl"></i></div>
                     <div>
-                        <p class="text-xs font-bold text-slate-500 mb-1">إجمالي عدد العروض</p>
-                        <h3 id="dash-total-quotes" class="text-2xl font-black text-slate-900 font-mono">0</h3>
-                        <p class="text-[11px] text-brand-600 font-semibold mt-1"><i class="fa-solid fa-file-invoice ml-1"></i>عرض أسعار مسجل</p>
-                    </div>
-                    <div class="w-12 h-12 rounded-2xl bg-blue-50 text-brand-600 flex items-center justify-center text-xl">
-                        <i class="fa-solid fa-file-signature"></i>
+                        <p class="text-xs text-slate-500 font-bold">إجمالي المبالغ والخدمات</p>
+                        <h3 id="dashTotalAmount" class="text-2xl font-black text-emerald-600">0.00 ج.م</h3>
                     </div>
                 </div>
-
-                <!-- Active Target Companies -->
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4 space-x-reverse">
+                    <div class="bg-purple-100 text-purple-600 p-3 rounded-xl"><i class="fa-solid fa-building text-2xl"></i></div>
                     <div>
-                        <p class="text-xs font-bold text-slate-500 mb-1">الشركات المستهدفة</p>
-                        <h3 id="dash-total-companies" class="text-2xl font-black text-slate-900 font-mono">0</h3>
-                        <p class="text-[11px] text-purple-600 font-semibold mt-1"><i class="fa-solid fa-building ml-1"></i>عملاء مسجلين</p>
-                    </div>
-                    <div class="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl">
-                        <i class="fa-solid fa-city"></i>
+                        <p class="text-xs text-slate-500 font-bold">الشركات المتعامل معها</p>
+                        <h3 id="dashClientCount" class="text-2xl font-black text-slate-800">0</h3>
                     </div>
                 </div>
-
-                <!-- Average Quote Value -->
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4 space-x-reverse">
+                    <div class="bg-amber-100 text-amber-600 p-3 rounded-xl"><i class="fa-solid fa-chart-line text-2xl"></i></div>
                     <div>
-                        <p class="text-xs font-bold text-slate-500 mb-1">متوسط قيمة العرض</p>
-                        <h3 id="dash-avg-quote" class="text-2xl font-black text-slate-900 font-mono">0.00</h3>
-                        <p class="text-[11px] text-amber-600 font-semibold mt-1"><i class="fa-solid fa-calculator ml-1"></i>لكل فاتورة</p>
-                    </div>
-                    <div class="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl">
-                        <i class="fa-solid fa-chart-simple"></i>
+                        <p class="text-xs text-slate-500 font-bold">متوسط قيمة العرض</p>
+                        <h3 id="dashAvgQuote" class="text-2xl font-black text-slate-800">0.00 ج.م</h3>
                     </div>
                 </div>
             </div>
 
-            <!-- Per Company Sales Breakdown Analytics Table -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
-                    <div>
-                        <h2 class="text-lg font-extrabold text-slate-800 flex items-center">
-                            <i class="fa-solid fa-chart-column text-brand-600 ml-2"></i>تحليلات وإحصائيات المبيعات لكل شركة
-                        </h2>
-                        <p class="text-xs text-slate-500 mt-1">توضح توزيع عروض الأسعار والمبالغ ونسبتها المئوية من إجمالي الفواتير المسجلة</p>
-                    </div>
-
-                    <button onclick="switchTab('editor')" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl shadow transition flex items-center">
-                        <i class="fa-solid fa-plus ml-1.5"></i>إنشاء عرض سعر جديد
-                    </button>
-                </div>
-
-                <div class="overflow-x-auto rounded-xl border border-slate-200">
+            <!-- Company Analytics Breakdown -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h3 class="text-base font-bold text-slate-800 mb-4"><i class="fa-solid fa-list-check text-blue-600 ml-2"></i>تحليل عروض الأسعار لكل شركة عميل</h3>
+                <div class="overflow-x-auto">
                     <table class="w-full text-right text-sm">
-                        <thead class="bg-slate-900 text-white text-xs font-bold uppercase">
-                            <tr>
-                                <th class="p-3.5">اسم الشركة / العميل</th>
-                                <th class="p-3.5 text-center">عدد عروض الأسعار</th>
-                                <th class="p-3.5 text-left">إجمالي المبالغ المسجلة</th>
-                                <th class="p-3.5 w-48 text-center">حصة الشركة من المبيعات</th>
-                                <th class="p-3.5 text-center">إجراء سري</th>
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-700">
+                                <th class="p-3 rounded-r-lg">اسم الشركة العميل</th>
+                                <th class="p-3 text-center">عدد العروض الصادرة</th>
+                                <th class="p-3 text-left">إجمالي المبالغ</th>
+                                <th class="p-3 rounded-l-lg text-center">النسبة من المبيعات</th>
                             </tr>
                         </thead>
-                        <tbody id="company-analytics-body" class="divide-y divide-slate-200">
-                            <!-- Dynamically generated rows -->
+                        <tbody id="companyAnalyticsBody" class="divide-y">
+                            <tr><td colspan="4" class="text-center p-4 text-slate-400">لا توجد بيانات متاحة للعرض</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
+        </section>
 
-        </div>
-
-        <!-- TAB 3: SAVED QUOTATIONS LEDGER HISTORY -->
-        <div id="tab-history" class="hidden space-y-6">
+        <!-- TAB 3: LEDGER PAGE -->
+        <section id="sec-ledger" class="space-y-6 hidden">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-extrabold text-slate-800"><i class="fa-solid fa-table-list text-blue-600 ml-2"></i>سجل الفواتير وعروض الأسعار</h2>
+                <div class="flex gap-2">
+                    <button onclick="exportFullLedgerExcel()" class="bg-emerald-600 text-white px-3 py-2 rounded-xl hover:bg-emerald-700 text-xs font-bold">
+                        <i class="fa-solid fa-file-excel ml-1"></i> تصدير السجل بالكامل (Excel)
+                    </button>
+                    <button onclick="clearAllLedgerProtected()" class="bg-rose-50 text-rose-600 border border-rose-200 px-3 py-2 rounded-xl hover:bg-rose-100 text-xs font-bold">
+                        <i class="fa-solid fa-trash ml-1"></i> مسح السجل
+                    </button>
+                </div>
+            </div>
 
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
-                    <div>
-                        <h2 class="text-lg font-extrabold text-slate-800 flex items-center">
-                            <i class="fa-solid fa-file-excel text-emerald-600 ml-2"></i>سجل شيت الفواتير المسجلة (Internal Ledger)
-                        </h2>
-                        <p class="text-xs text-slate-500 mt-1">البيانات محفوظة محلياً في المتصفح تلقائياً ولا تضيع عند Refresh. عمليات الحذف محمية بالرقم السري (2580)</p>
-                    </div>
-
-                    <div class="flex flex-wrap items-center gap-2">
-                        <button onclick="exportAllLedgerExcel()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm transition flex items-center">
-                            <i class="fa-solid fa-file-arrow-down ml-1.5"></i>تصدير السجل إلى Excel (.xlsx)
-                        </button>
-                        <button onclick="promptClearAllHistory()" class="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs sm:text-sm font-bold rounded-xl border border-rose-200 transition flex items-center">
-                            <i class="fa-solid fa-trash-can ml-1.5"></i>مسح السجل بالكامل
-                        </button>
-                    </div>
-                </div>
-
-                <div class="overflow-x-auto rounded-xl border border-slate-200">
-                    <table class="w-full text-right text-xs sm:text-sm">
-                        <thead class="bg-slate-900 text-white font-bold text-xs uppercase border-b border-slate-200">
-                            <tr>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-right text-sm">
+                        <thead>
+                            <tr class="bg-slate-900 text-white">
                                 <th class="p-3">رقم العرض</th>
                                 <th class="p-3">التاريخ</th>
-                                <th class="p-3">اسم الشركة / العميل</th>
-                                <th class="p-3">السجل التجاري</th>
-                                <th class="p-3">نسبة الضريبة</th>
-                                <th class="p-3 text-left">الإجمالي النهائي</th>
-                                <th class="p-3 text-center">الإجراءات</th>
+                                <th class="p-3">اسم العميل</th>
+                                <th class="p-3 text-center">عدد البنود</th>
+                                <th class="p-3">الإجمالي النهائي</th>
+                                <th class="p-3 text-center">الإجراءات والتحميل</th>
                             </tr>
                         </thead>
-                        <tbody id="history-table-body" class="divide-y divide-slate-200">
-                            <!-- Dynamically generated rows -->
+                        <tbody id="ledgerTableBody" class="divide-y divide-slate-100">
+                            <tr><td colspan="6" class="text-center p-6 text-slate-400">جاري تحميل السجل السحابي...</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
+        </section>
 
-        </div>
+        <!-- TAB 4: COMPANIES DIRECTORY -->
+        <section id="sec-companies" class="space-y-6 hidden">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+                <!-- Add Company Form -->
+                <div class="md:col-span-5 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="text-base font-bold text-slate-800 mb-4 pb-2 border-b"><i class="fa-solid fa-building-circle-check text-blue-600 ml-2"></i>إضافة شركة جديدة للدليل</h3>
+                    <form id="companyForm" onsubmit="addCompany(event)" class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1">نوع الشركة:</label>
+                            <select id="compType" class="w-full border rounded-lg p-2 text-sm">
+                                <option value="client">شركة عميل (مستلم)</option>
+                                <option value="my">شركتي الموردة (مصدر العرض)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1">اسم الشركة الرسمي:</label>
+                            <input type="text" id="compName" required class="w-full border rounded-lg p-2 text-sm" placeholder="مثال: شركة السلام للتوريدات">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1">رقم السجل التجاري:</label>
+                            <input type="text" id="compCR" class="w-full border rounded-lg p-2 text-sm" placeholder="اختياري">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1">رقم الملف الضريبي:</label>
+                            <input type="text" id="compTax" class="w-full border rounded-lg p-2 text-sm" placeholder="اختياري">
+                        </div>
+                        <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2.5 rounded-xl hover:bg-blue-700 text-sm shadow">
+                            <i class="fa-solid fa-plus-circle ml-1"></i> حفظ الشركة السحابية
+                        </button>
+                    </form>
+                </div>
 
-        <!-- TAB 4: COMPANIES MANAGEMENT DIRECTORY -->
-        <div id="tab-companies" class="hidden space-y-6">
-
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
-                    <div>
-                        <h2 class="text-lg font-extrabold text-slate-800 flex items-center">
-                            <i class="fa-solid fa-building-circle-check text-brand-600 ml-2"></i>دليل إدارة الشركات ببياناتك الحقيقية
-                        </h2>
-                        <p class="text-xs text-slate-500 mt-1">أضف شركاتك وعملائك الحقيقيين لاستدعائهم بضغطة زر عند إنشاء أي عرض سعر جديد</p>
+                <!-- Companies List -->
+                <div class="md:col-span-7 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="text-base font-bold text-slate-800 mb-4 pb-2 border-b"><i class="fa-solid fa-address-book text-blue-600 ml-2"></i>دليل الشركات المسجلة</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right text-xs">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-700">
+                                    <th class="p-2">النوع</th>
+                                    <th class="p-2">اسم الشركة</th>
+                                    <th class="p-2">السجل</th>
+                                    <th class="p-2">الرقم الضريبي</th>
+                                    <th class="p-2 text-center">حذف</th>
+                                </tr>
+                            </thead>
+                            <tbody id="companiesTableBody" class="divide-y">
+                                <tr><td colspan="5" class="text-center p-4 text-slate-400">لا توجد شركات مسجلة بعد</td></tr>
+                            </tbody>
+                        </table>
                     </div>
-
-                    <button onclick="openAddCompanyModal()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow transition flex items-center">
-                        <i class="fa-solid fa-plus ml-1.5"></i>إضافة شركة جديدة
-                    </button>
-                </div>
-
-                <div class="overflow-x-auto rounded-xl border border-slate-200">
-                    <table class="w-full text-right text-xs sm:text-sm">
-                        <thead class="bg-slate-900 text-white font-bold text-xs uppercase border-b border-slate-200">
-                            <tr>
-                                <th class="p-3">اسم الشركة</th>
-                                <th class="p-3">السجل التجاري</th>
-                                <th class="p-3">الرقم الضريبي</th>
-                                <th class="p-3">رقم الهاتف</th>
-                                <th class="p-3">العنوان</th>
-                                <th class="p-3 text-center">حذف محمي</th>
-                            </tr>
-                        </thead>
-                        <tbody id="companies-table-body" class="divide-y divide-slate-200">
-                            <!-- Dynamically generated rows -->
-                        </tbody>
-                    </table>
                 </div>
             </div>
-
-        </div>
+        </section>
 
     </main>
 
-    <!-- Modal: Add New Company -->
-    <div id="company-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
-            <div class="flex items-center space-x-3 space-x-reverse text-brand-700">
-                <div class="w-10 h-10 rounded-full bg-brand-50 flex items-center justify-center">
-                    <i class="fa-solid fa-building text-lg"></i>
-                </div>
-                <h3 class="text-lg font-extrabold">إضافة شركة جديدة</h3>
-            </div>
-
-            <div class="space-y-3">
-                <div>
-                    <label class="block text-xs font-bold text-slate-600 mb-1">اسم الشركة / العميل *</label>
-                    <input type="text" id="modal-company-name" placeholder="اسم الشركة" class="w-full border border-slate-300 rounded-xl p-2.5 text-xs font-bold focus:ring-2 focus:ring-brand-500 outline-none">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-600 mb-1">السجل التجاري (CR)</label>
-                    <input type="text" id="modal-company-cr" placeholder="رقم السجل التجاري" class="w-full border border-slate-300 rounded-xl p-2.5 text-xs focus:ring-2 focus:ring-brand-500 outline-none">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-600 mb-1">الرقم / الملف الضريبي (Tax ID)</label>
-                    <input type="text" id="modal-company-tax" placeholder="الرقم الضريبي" class="w-full border border-slate-300 rounded-xl p-2.5 text-xs focus:ring-2 focus:ring-brand-500 outline-none">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-600 mb-1">رقم التواصل / الهاتف</label>
-                    <input type="text" id="modal-company-phone" placeholder="رقم الموبايل أو الهاتف" class="w-full border border-slate-300 rounded-xl p-2.5 text-xs focus:ring-2 focus:ring-brand-500 outline-none">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-600 mb-1">العنوان</label>
-                    <input type="text" id="modal-company-address" placeholder="عنوان مقر الشركة" class="w-full border border-slate-300 rounded-xl p-2.5 text-xs focus:ring-2 focus:ring-brand-500 outline-none">
-                </div>
-            </div>
-
-            <div class="flex justify-end gap-2 pt-2">
-                <button onclick="closeAddCompanyModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">
-                    إلغاء
-                </button>
-                <button onclick="saveNewCompany()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition">
-                    حفظ الشركة
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Notification Toast Element -->
-    <div id="toast-notification" class="fixed bottom-5 left-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
-        <div id="toast-content" class="bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center space-x-2 space-x-reverse text-xs sm:text-sm font-bold">
-            <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
-            <span id="toast-text">تمت العملية بنجاح</span>
-        </div>
-    </div>
-
+    <!-- JavaScript Application Logic -->
     <script>
-        // STRICT PIN CODE CONFIGURATION (SECURITY REQUIREMENT)
-        const STRICT_PIN = "2580";
+        // 1. FIREBASE INITIALIZATION WITH YOUR EXACT PROJECT DETAILS
+        const firebaseConfig = {
+            databaseURL: "https://afhjsg2563-db0e2-default-rtdb.firebaseio.com"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-        // Application State Data (Starting Completely Empty per Instructions)
-        let items = [
-            { id: Date.now(), name: '', qty: 1, price: 0 }
-        ];
+        // Security Passcode
+        const SECRET_PASSCODE = "2580";
 
-        let historyLogs = [];
-        let companiesList = [];
+        // Global State Array Memory
+        let globalQuotes = [];
+        let globalCompanies = [];
+        let editingQuoteId = null;
 
-        // Application Initialization
+        // On App Load
         window.addEventListener('DOMContentLoaded', () => {
-            initDatesAndInvoiceNumber();
-            loadLocalStorageData();
-            renderItemsTable();
-            calculateTotals();
-            updateDashboardAnalytics();
+            document.getElementById('quoteDate').valueAsDate = new Date();
+            setupFirebaseRealtimeListeners();
+            addItemRow(); // Default row
+            
+            // Auto update preview on inputs
+            ['myCompanySelect', 'clientCompanySelect', 'quoteDate', 'taxRate'].forEach(id => {
+                document.getElementById(id).addEventListener('change', calculateTotals);
+            });
         });
 
-        // Initialize Dates and Random Auto-Generated Invoice Number
-        function initDatesAndInvoiceNumber() {
-            document.getElementById('invoice-date').valueAsDate = new Date();
-            document.getElementById('invoice-number').value = 'QUOT-' + Math.floor(100000 + Math.random() * 900000);
-        }
+        // 2. FIREBASE REALTIME LISTENERS (SYNC ACROSS ALL DEVICES)
+        function setupFirebaseRealtimeListeners() {
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
 
-        // Local Storage State Management
-        function loadLocalStorageData() {
-            // Load Quotations History
-            const savedHistory = localStorage.getItem('strict_quotation_history_v3');
-            if (savedHistory) {
-                try { historyLogs = JSON.parse(savedHistory); } catch(e) { historyLogs = []; }
-            } else {
-                historyLogs = [];
-            }
+            // Listen to Quotations Node
+            db.ref('quotations').on('value', (snapshot) => {
+                const data = snapshot.val();
+                globalQuotes = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+                
+                statusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+                statusText.innerText = "متصل بالسحابة اللحظية";
 
-            // Load Custom Companies Directory
-            const savedCompanies = localStorage.getItem('strict_companies_directory_v3');
-            if (savedCompanies) {
-                try { companiesList = JSON.parse(savedCompanies); } catch(e) { companiesList = []; }
-            } else {
-                companiesList = [];
-            }
+                renderLedgerTable();
+                renderDashboard();
+            }, (error) => {
+                statusDot.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+                statusText.innerText = "خطأ في الاتصال بالسحابة";
+            });
 
-            // Load Supplier Company Metadata
-            const savedSupplier = localStorage.getItem('supplier_company_meta');
-            if (savedSupplier) {
-                try {
-                    const sup = JSON.parse(savedSupplier);
-                    if (sup.name) document.getElementById('my-company-name').value = sup.name;
-                    if (sup.cr) document.getElementById('my-company-cr').value = sup.cr;
-                    if (sup.tax) document.getElementById('my-company-tax').value = sup.tax;
-                    if (sup.phone) document.getElementById('my-company-phone').value = sup.phone;
-                    if (sup.address) document.getElementById('my-company-address').value = sup.address;
-                } catch(e) {}
-            }
-
-            document.getElementById('history-count').textContent = historyLogs.length;
-            document.getElementById('companies-count').textContent = companiesList.length;
-
-            renderHistoryTable();
-            renderCompaniesTable();
-            populateCompaniesDropdown();
-        }
-
-        function saveHistoryToStorage() {
-            localStorage.setItem('strict_quotation_history_v3', JSON.stringify(historyLogs));
-            document.getElementById('history-count').textContent = historyLogs.length;
-        }
-
-        function saveCompaniesToStorage() {
-            localStorage.setItem('strict_companies_directory_v3', JSON.stringify(companiesList));
-            document.getElementById('companies-count').textContent = companiesList.length;
-            populateCompaniesDropdown();
-        }
-
-        function saveSupplierMeta() {
-            const meta = {
-                name: document.getElementById('my-company-name').value,
-                cr: document.getElementById('my-company-cr').value,
-                tax: document.getElementById('my-company-tax').value,
-                phone: document.getElementById('my-company-phone').value,
-                address: document.getElementById('my-company-address').value
-            };
-            localStorage.setItem('supplier_company_meta', JSON.stringify(meta));
-        }
-
-        // Render Quotation Items Table Rows
-        function renderItemsTable() {
-            const tbody = document.getElementById('items-table-body');
-            tbody.innerHTML = '';
-
-            items.forEach((item, index) => {
-                const total = ((item.qty || 0) * (item.price || 0)).toFixed(2);
-                const tr = document.createElement('tr');
-                tr.className = "hover:bg-slate-50 transition";
-                tr.innerHTML = `
-                    <td class="p-3 text-center text-slate-400 font-mono font-bold">${index + 1}</td>
-                    <td class="p-3">
-                        <input type="text" value="${escapeHtml(item.name)}" onchange="updateItem(${item.id}, 'name', this.value)" class="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-brand-500 focus:outline-none p-1 font-bold text-slate-800" placeholder="اسم الخامة / المنتج">
-                    </td>
-                    <td class="p-3 text-center">
-                        <input type="number" min="1" value="${item.qty}" oninput="updateItem(${item.id}, 'qty', this.value)" class="w-20 text-center bg-white border border-slate-300 rounded-lg p-1 font-mono font-bold text-slate-800 focus:ring-1 focus:ring-brand-500 outline-none">
-                    </td>
-                    <td class="p-3 text-center">
-                        <input type="number" min="0" step="0.01" value="${item.price}" oninput="updateItem(${item.id}, 'price', this.value)" class="w-28 text-center bg-white border border-slate-300 rounded-lg p-1 font-mono font-bold text-slate-800 focus:ring-1 focus:ring-brand-500 outline-none">
-                    </td>
-                    <td class="p-3 text-left font-mono font-bold text-slate-800">
-                        ${total}
-                    </td>
-                    <td class="p-3 text-center no-print">
-                        <button onclick="removeItem(${item.id})" class="text-rose-500 hover:text-rose-700 p-1.5 rounded-lg hover:bg-rose-50 transition">
-                            <i class="fa-regular fa-trash-can"></i>
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
+            // Listen to Companies Node
+            db.ref('companies').on('value', (snapshot) => {
+                const data = snapshot.val();
+                globalCompanies = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+                
+                renderCompaniesDropdowns();
+                renderCompaniesTable();
             });
         }
 
-        function updateItem(id, field, value) {
-            const item = items.find(i => i.id === id);
-            if (item) {
-                if (field === 'qty') item.qty = parseFloat(value) || 0;
-                else if (field === 'price') item.price = parseFloat(value) || 0;
-                else item[field] = value;
+        // Tab Navigation Switcher
+        function switchTab(tabName) {
+            ['create', 'dashboard', 'ledger', 'companies'].forEach(t => {
+                document.getElementById(`sec-${t}`).classList.add('hidden');
+                document.getElementById(`tab-${t}`).className = 'px-4 py-2 rounded-lg text-slate-400 hover:text-white transition-all';
+            });
+
+            document.getElementById(`sec-${tabName}`).classList.remove('hidden');
+            document.getElementById(`tab-${tabName}`).className = 'px-4 py-2 rounded-lg tab-active transition-all';
+        }
+
+        // Add Items Table Row
+        function addItemRow(name = '', qty = 1, price = 0) {
+            const tbody = document.getElementById('itemsTableBody');
+            const row = document.createElement('tr');
+            row.className = 'border-b border-slate-100';
+            row.innerHTML = `
+                <td class="p-1.5"><input type="text" value="${name}" placeholder="اسم الخامة/المنتج" class="item-name w-full border rounded p-1 text-xs" oninput="calculateTotals()"></td>
+                <td class="p-1.5"><input type="number" value="${qty}" min="1" class="item-qty w-full border rounded p-1 text-xs text-center" oninput="calculateTotals()"></td>
+                <td class="p-1.5"><input type="number" value="${price}" min="0" step="any" class="item-price w-full border rounded p-1 text-xs text-center" oninput="calculateTotals()"></td>
+                <td class="p-1.5 font-bold item-total text-left">0.00</td>
+                <td class="p-1.5 text-center"><button type="button" onclick="removeRow(this)" class="text-rose-500 hover:text-rose-700"><i class="fa-solid fa-xmark"></i></button></td>
+            `;
+            tbody.appendChild(row);
+            calculateTotals();
+        }
+
+        function removeRow(btn) {
+            const tbody = document.getElementById('itemsTableBody');
+            if(tbody.children.length > 1) {
+                btn.closest('tr').remove();
                 calculateTotals();
             }
         }
 
-        function addNewRow() {
-            items.push({ id: Date.now(), name: '', qty: 1, price: 0 });
-            renderItemsTable();
-            calculateTotals();
-        }
-
-        function removeItem(id) {
-            if (items.length <= 1) {
-                showToast("يجب وجود صنف واحد على الأقل في عرض السعر", "error");
-                return;
-            }
-            items = items.filter(i => i.id !== id);
-            renderItemsTable();
-            calculateTotals();
-        }
-
-        // Calculations Engine
+        // Calculation Engine & Realtime Preview Update
         function calculateTotals() {
+            const rows = document.querySelectorAll('#itemsTableBody tr');
             let subtotal = 0;
-            items.forEach(i => {
-                subtotal += (i.qty || 0) * (i.price || 0);
+            let itemsData = [];
+
+            const prevItemsBody = document.getElementById('prevItemsBody');
+            prevItemsBody.innerHTML = '';
+
+            rows.forEach(row => {
+                const name = row.querySelector('.item-name').value;
+                const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+                const price = parseFloat(row.querySelector('.item-price').value) || 0;
+                const lineTotal = qty * price;
+                
+                row.querySelector('.item-total').innerText = lineTotal.toFixed(2);
+                subtotal += lineTotal;
+
+                if (name.trim() !== '') {
+                    itemsData.push({ name, qty, price, total: lineTotal });
+                    // Append row to PDF Preview
+                    const prtr = document.createElement('tr');
+                    prtr.className = "border-b text-[10px]";
+                    prtr.innerHTML = `
+                        <td class="p-1 border">${name}</td>
+                        <td class="p-1 border text-center">${qty}</td>
+                        <td class="p-1 border text-center">${price.toFixed(2)}</td>
+                        <td class="p-1 border text-left font-bold">${lineTotal.toFixed(2)}</td>
+                    `;
+                    prevItemsBody.appendChild(prtr);
+                }
             });
 
-            const taxRateInput = document.getElementById('tax-rate-input');
-            let taxRate = parseFloat(taxRateInput.value) || 0;
-            if (taxRate < 0) taxRate = 0;
+            if (itemsData.length === 0) {
+                prevItemsBody.innerHTML = '<tr><td colspan="4" class="text-center p-3 text-slate-400">لم يتم إضافة بنود بعد</td></tr>';
+            }
 
+            const taxRate = parseFloat(document.getElementById('taxRate').value) || 0;
             const taxAmount = subtotal * (taxRate / 100);
             const grandTotal = subtotal + taxAmount;
 
-            document.getElementById('subtotal-val').textContent = subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            document.getElementById('tax-amount-val').textContent = taxAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            document.getElementById('grand-total-val').textContent = grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            // Form Totals
+            document.getElementById('subTotalVal').innerText = subtotal.toFixed(2) + ' ج.م';
+            document.getElementById('taxLabelVal').innerText = `قيمة الضريبة (${taxRate}%):`;
+            document.getElementById('taxAmountVal').innerText = taxAmount.toFixed(2) + ' ج.م';
+            document.getElementById('grandTotalVal').innerText = grandTotal.toFixed(2) + ' ج.م';
 
-            const noteElem = document.getElementById('tax-summary-note');
-            if (taxRate > 0) {
-                noteElem.textContent = `ملاحظة: تم إضافة نسبة ضريبة قدرها ${taxRate}% على القيمة الإجمالية للعرض.`;
-            } else {
-                noteElem.textContent = `ملاحظة: هذا العرض مقدم بدون إضافة أي ضرائب أو رسوم (0%).`;
+            // Preview Totals Update
+            document.getElementById('prevSubtotal').innerText = subtotal.toFixed(2);
+            document.getElementById('prevTaxText').innerText = `الضريبة (${taxRate}%):`;
+            document.getElementById('prevTaxVal').innerText = taxAmount.toFixed(2);
+            document.getElementById('prevGrandTotal').innerText = grandTotal.toFixed(2) + ' ج.م';
+            document.getElementById('prevTaxNote').innerText = `تم إضافة ضريبة القيمة المضافة بقيمة ${taxRate}% وفقاً للائحة التنفيذية.`;
+
+            // Preview Companies Update
+            const myCompId = document.getElementById('myCompanySelect').value;
+            const clientCompId = document.getElementById('clientCompanySelect').value;
+
+            const myComp = globalCompanies.find(c => c.id === myCompId);
+            const clientComp = globalCompanies.find(c => c.id === clientCompId);
+
+            document.getElementById('prevMyName').innerText = myComp ? myComp.name : 'اسم شركتك';
+            document.getElementById('prevMyCR').innerText = `سجل تجاري: ${myComp && myComp.cr ? myComp.cr : '-'}`;
+            document.getElementById('prevMyTax').innerText = `ملف ضريبي: ${myComp && myComp.tax ? myComp.tax : '-'}`;
+
+            document.getElementById('prevClientName').innerText = clientComp ? clientComp.name : 'اسم الشركة العميل';
+            document.getElementById('prevClientTax').innerText = `الملف الضريبي: ${clientComp && clientComp.tax ? clientComp.tax : '-'}`;
+
+            // Auto quote number preview
+            if(!editingQuoteId) {
+                const autoNum = 'Q-' + String(globalQuotes.length + 1).padStart(4, '0');
+                document.getElementById('quoteNumber').value = autoNum;
+                document.getElementById('prevQuoteNum').innerText = `رقم: ${autoNum}`;
             }
+            document.getElementById('prevQuoteDate').innerText = `التاريخ: ${document.getElementById('quoteDate').value}`;
 
-            // Sync supplier data to storage silently
-            saveSupplierMeta();
+            return { subtotal, taxRate, taxAmount, grandTotal, itemsData, myComp, clientComp };
         }
 
-        function applyTaxPreset(val) {
-            if (val !== 'custom') {
-                document.getElementById('tax-rate-input').value = val;
-                calculateTotals();
-            }
-        }
+        // SAVE TO FIREBASE & GENERATE DOWNLOAD (PDF OR EXCEL)
+        async function saveAndGenerate(exportType) {
+            const calc = calculateTotals();
 
-        // Save Current Quotation to Ledger History
-        function saveQuotationToLedger() {
-            const clientName = document.getElementById('client-name').value.trim();
-            if (!clientName) {
-                showToast("يرجى إدخال اسم الشركة / العميل المستهدف أولاً", "error");
+            if (!calc.clientComp) {
+                Swal.fire('تنبيـه', 'برجاء اختيار الشركة العميل أولاً', 'warning');
+                return;
+            }
+            if (calc.itemsData.length === 0) {
+                Swal.fire('تنبيـه', 'برجاء إضافة بند واحد على الأقل ببيان واضح', 'warning');
                 return;
             }
 
-            let subtotal = 0;
-            items.forEach(i => subtotal += (i.qty || 0) * (i.price || 0));
-            const taxRate = parseFloat(document.getElementById('tax-rate-input').value) || 0;
-            const taxAmount = subtotal * (taxRate / 100);
-            const grandTotal = subtotal + taxAmount;
-
-            const record = {
-                id: Date.now(),
-                invoiceNumber: document.getElementById('invoice-number').value,
-                date: document.getElementById('invoice-date').value,
-                clientName: clientName,
-                clientCr: document.getElementById('client-cr').value,
-                clientTax: document.getElementById('client-tax').value,
-                items: JSON.parse(JSON.stringify(items)),
-                subtotal: subtotal,
-                taxRate: taxRate,
-                taxAmount: taxAmount,
-                grandTotal: grandTotal,
-                timestamp: new Date().toISOString()
+            const quoteData = {
+                quoteNumber: document.getElementById('quoteNumber').value,
+                date: document.getElementById('quoteDate').value,
+                myCompany: calc.myComp ? calc.myComp.name : '',
+                clientCompany: calc.clientComp.name,
+                items: calc.itemsData,
+                subtotal: calc.subtotal,
+                taxRate: calc.taxRate,
+                taxAmount: calc.taxAmount,
+                grandTotal: calc.grandTotal,
+                updatedAt: firebase.database.ServerValue.TIMESTAMP
             };
 
-            historyLogs.unshift(record);
-            saveHistoryToStorage();
-            renderHistoryTable();
-            updateDashboardAnalytics();
-            showToast("تم تسجيل وحفظ الفاتورة بالسجل بنجاح!");
-        }
+            Swal.fire({ title: 'جاري الحفظ بالسحابة...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-        // Render Ledger History Table
-        function renderHistoryTable() {
-            const tbody = document.getElementById('history-table-body');
-            tbody.innerHTML = '';
-
-            if (historyLogs.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="7" class="text-center py-8 text-slate-400 font-bold">لا توجد فواتير مسجلة حتى الآن. قم بإنشاء فاتورة وتسجيلها بالضغط على "تسجيل بالسجل"</td>
-                    </tr>
-                `;
-                return;
-            }
-
-            historyLogs.forEach(rec => {
-                const tr = document.createElement('tr');
-                tr.className = "hover:bg-slate-50 transition";
-                tr.innerHTML = `
-                    <td class="p-3 font-mono font-bold text-brand-700">${escapeHtml(rec.invoiceNumber)}</td>
-                    <td class="p-3 text-slate-600">${rec.date}</td>
-                    <td class="p-3 font-bold text-slate-800">${escapeHtml(rec.clientName)}</td>
-                    <td class="p-3 text-slate-500 font-mono">${escapeHtml(rec.clientCr || '-')}</td>
-                    <td class="p-3 text-slate-600 font-bold">${rec.taxRate}%</td>
-                    <td class="p-3 text-left font-mono font-bold text-slate-800">${rec.grandTotal.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                    <td class="p-3 text-center space-x-1 space-x-reverse">
-                        <button onclick="restoreQuotationForEdit(${rec.id})" title="تعديل واستعادة" class="px-2.5 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-lg text-xs font-bold transition">
-                            <i class="fa-solid fa-folder-open ml-1"></i>تعديل
-                        </button>
-                        <button onclick="promptProtectedDeleteRecord(${rec.id})" title="حذف محمي" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition">
-                            <i class="fa-solid fa-trash ml-1"></i>حذف
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        // Restore Quotation to Editor
-        function restoreQuotationForEdit(id) {
-            const rec = historyLogs.find(r => r.id === id);
-            if (!rec) return;
-
-            document.getElementById('invoice-number').value = rec.invoiceNumber;
-            document.getElementById('invoice-date').value = rec.date;
-            document.getElementById('client-name').value = rec.clientName;
-            document.getElementById('client-cr').value = rec.clientCr || '';
-            document.getElementById('client-tax').value = rec.clientTax || '';
-            document.getElementById('tax-rate-input').value = rec.taxRate;
-
-            items = JSON.parse(JSON.stringify(rec.items));
-            renderItemsTable();
-            calculateTotals();
-
-            switchTab('editor');
-            showToast("تم استعادة عرض السعر بنجاح لتعديله وإعادة إصداره");
-        }
-
-        // Dashboard Analytics Update
-        function updateDashboardAnalytics() {
-            let totalRevenue = 0;
-            let totalQuotes = historyLogs.length;
-            const companyMap = {};
-
-            historyLogs.forEach(rec => {
-                totalRevenue += rec.grandTotal;
-                const comp = rec.clientName.trim();
-                if (!companyMap[comp]) {
-                    companyMap[comp] = { count: 0, totalAmount: 0 };
+            try {
+                if (editingQuoteId) {
+                    await db.ref(`quotations/${editingQuoteId}`).update(quoteData);
+                    editingQuoteId = null;
+                    document.getElementById('editBadge').classList.add('hidden');
+                } else {
+                    await db.ref('quotations').push(quoteData);
                 }
-                companyMap[comp].count += 1;
-                companyMap[comp].totalAmount += rec.grandTotal;
-            });
 
-            const uniqueCompaniesCount = Object.keys(companyMap).length;
-            const avgQuoteVal = totalQuotes > 0 ? (totalRevenue / totalQuotes) : 0;
+                Swal.close();
 
-            document.getElementById('dash-total-revenue').textContent = totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            document.getElementById('dash-total-quotes').textContent = totalQuotes;
-            document.getElementById('dash-total-companies').textContent = uniqueCompaniesCount;
-            document.getElementById('dash-avg-quote').textContent = avgQuoteVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                // Generate Export
+                if (exportType === 'pdf') {
+                    downloadPDF(quoteData.quoteNumber);
+                } else if (exportType === 'excel') {
+                    downloadSingleExcel(quoteData);
+                }
 
-            const tbody = document.getElementById('company-analytics-body');
-            tbody.innerHTML = '';
-
-            if (uniqueCompaniesCount === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="5" class="text-center py-8 text-slate-400 font-bold">لا توجد بيانات مبيعات مسجلة للشركات حتى الآن</td>
-                    </tr>
-                `;
-                return;
+                resetQuoteForm();
+            } catch (err) {
+                Swal.fire('خطأ', 'حدث خطأ في حفظ البيانات سحابياً: ' + err.message, 'error');
             }
-
-            Object.keys(companyMap).forEach(companyName => {
-                const data = companyMap[companyName];
-                const percentage = totalRevenue > 0 ? ((data.totalAmount / totalRevenue) * 100).toFixed(1) : 0;
-
-                const tr = document.createElement('tr');
-                tr.className = "hover:bg-slate-50 transition";
-                tr.innerHTML = `
-                    <td class="p-3.5 font-bold text-slate-800 flex items-center">
-                        <div class="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center font-bold ml-2">
-                            <i class="fa-solid fa-building"></i>
-                        </div>
-                        ${escapeHtml(companyName)}
-                    </td>
-                    <td class="p-3.5 text-center font-mono font-bold text-brand-700">${data.count}</td>
-                    <td class="p-3.5 text-left font-mono font-bold text-slate-900">${data.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                    <td class="p-3.5 text-center">
-                        <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden mb-1">
-                            <div class="bg-brand-600 h-2.5 rounded-full" style="width: ${percentage}%"></div>
-                        </div>
-                        <span class="text-[11px] font-bold text-slate-500">${percentage}% من المبيعات</span>
-                    </td>
-                    <td class="p-3.5 text-center">
-                        <button onclick="promptProtectedDeleteCompanySales('${escapeHtml(companyName)}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg transition">
-                            <i class="fa-solid fa-trash ml-1"></i>حذف كافة عروضها
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
         }
 
-        // Companies Management Operations
-        function populateCompaniesDropdown() {
-            const select = document.getElementById('company-select');
-            select.innerHTML = '<option value="">-- اختر شركة مسجلة --</option>';
-
-            companiesList.forEach((c, idx) => {
-                const opt = document.createElement('option');
-                opt.value = idx;
-                opt.textContent = c.name;
-                select.appendChild(opt);
-            });
+        // PDF Generation
+        function downloadPDF(quoteNum) {
+            const element = document.getElementById('pdfDocument');
+            const opt = {
+                margin: 0.5,
+                filename: `عرض_سعر_${quoteNum}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2 },
+                jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+            };
+            html2pdf().set(opt).from(element).save();
         }
 
-        function onSelectCompanyFromDropdown(idx) {
-            if (idx === "") return;
-            const comp = companiesList[idx];
-            if (comp) {
-                document.getElementById('client-name').value = comp.name;
-                document.getElementById('client-cr').value = comp.cr || '';
-                document.getElementById('client-tax').value = comp.tax || '';
-                showToast(`تم تطبيق بيانات شركة "${comp.name}"`);
+        // Single Excel Generation
+        function downloadSingleExcel(quote) {
+            const excelData = [
+                ["عرض سعر رقم", quote.quoteNumber],
+                ["التاريخ", quote.date],
+                ["الشركة الموردة", quote.myCompany],
+                ["الشركة العميل", quote.clientCompany],
+                [],
+                ["البيان/الخامة", "العدد", "السعر الفردي", "الإجمالي"]
+            ];
+
+            quote.items.forEach(i => {
+                excelData.push([i.name, i.qty, i.price, i.total]);
+            });
+
+            excelData.push([]);
+            excelData.push(["المجموع قبل الضريبة", "", "", quote.subtotal]);
+            excelData.push([`الضريبة (${quote.taxRate}%)`, "", "", quote.taxAmount]);
+            excelData.push(["الإجمالي النهائي", "", "", quote.grandTotal]);
+
+            const ws = XLSX.utils.aoa_to_sheet(excelData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "عرض سعر");
+            XLSX.writeFile(wb, `عرض_سعر_${quote.quoteNumber}.xlsx`);
+        }
+
+        // Reset Quote Form
+        function resetQuoteForm() {
+            document.getElementById('itemsTableBody').innerHTML = '';
+            addItemRow();
+            document.getElementById('quoteDate').valueAsDate = new Date();
+            calculateTotals();
+        }
+
+        // 3. COMPANIES MANAGEMENT
+        async function addCompany(e) {
+            e.preventDefault();
+            const name = document.getElementById('compName').value.trim();
+            const cr = document.getElementById('compCR').value.trim();
+            const tax = document.getElementById('compTax').value.trim();
+            const type = document.getElementById('compType').value;
+
+            if(!name) return;
+
+            try {
+                await db.ref('companies').push({ name, cr, tax, type });
+                document.getElementById('companyForm').reset();
+                Swal.fire('تم الحفظ', 'تمت إضافة الشركة للدليل السحابي', 'success');
+            } catch(err) {
+                Swal.fire('خطأ', err.message, 'error');
             }
+        }
+
+        function renderCompaniesDropdowns() {
+            const mySelect = document.getElementById('myCompanySelect');
+            const clientSelect = document.getElementById('clientCompanySelect');
+
+            const prevMyVal = mySelect.value;
+            const prevClientVal = clientSelect.value;
+
+            mySelect.innerHTML = '<option value="">-- اختر شركتك --</option>';
+            clientSelect.innerHTML = '<option value="">-- اختر شركة العميل --</option>';
+
+            globalCompanies.forEach(c => {
+                const opt = `<option value="${c.id}">${c.name}</option>`;
+                if (c.type === 'my') mySelect.innerHTML += opt;
+                else clientSelect.innerHTML += opt;
+            });
+
+            mySelect.value = prevMyVal;
+            clientSelect.value = prevClientVal;
         }
 
         function renderCompaniesTable() {
-            const tbody = document.getElementById('companies-table-body');
+            const tbody = document.getElementById('companiesTableBody');
             tbody.innerHTML = '';
 
-            if (companiesList.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="6" class="text-center py-8 text-slate-400 font-bold">لا توجد شركات مضافة بدليل الشركات. أضف شركاتك الحقيقية بالضغط على "إضافة شركة جديدة"</td>
-                    </tr>
-                `;
+            if (globalCompanies.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center p-4 text-slate-400">لا توجد شركات مسجلة بعد</td></tr>';
                 return;
             }
 
-            companiesList.forEach((comp, idx) => {
+            globalCompanies.forEach(c => {
                 const tr = document.createElement('tr');
-                tr.className = "hover:bg-slate-50 transition";
                 tr.innerHTML = `
-                    <td class="p-3 font-bold text-slate-800">${escapeHtml(comp.name)}</td>
-                    <td class="p-3 text-slate-600 font-mono">${escapeHtml(comp.cr || '-')}</td>
-                    <td class="p-3 text-slate-600 font-mono">${escapeHtml(comp.tax || '-')}</td>
-                    <td class="p-3 text-slate-600 font-mono">${escapeHtml(comp.phone || '-')}</td>
-                    <td class="p-3 text-slate-500 text-xs">${escapeHtml(comp.address || '-')}</td>
-                    <td class="p-3 text-center">
-                        <button onclick="promptProtectedDeleteCompany(${idx})" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg transition">
-                            <i class="fa-solid fa-trash ml-1"></i>حذف
-                        </button>
+                    <td class="p-2 font-bold ${c.type==='my'?'text-blue-600':'text-emerald-600'}">${c.type==='my'?'شركتي':'عميل'}</td>
+                    <td class="p-2 font-bold">${c.name}</td>
+                    <td class="p-2 text-slate-500">${c.cr || '-'}</td>
+                    <td class="p-2 text-slate-500">${c.tax || '-'}</td>
+                    <td class="p-2 text-center">
+                        <button onclick="deleteCompanyProtected('${c.id}')" class="text-rose-500 hover:text-rose-700"><i class="fa-solid fa-trash"></i></button>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
         }
 
-        function openAddCompanyModal() {
-            document.getElementById('modal-company-name').value = '';
-            document.getElementById('modal-company-cr').value = '';
-            document.getElementById('modal-company-tax').value = '';
-            document.getElementById('modal-company-phone').value = '';
-            document.getElementById('modal-company-address').value = '';
-            document.getElementById('company-modal').classList.remove('hidden');
-        }
-
-        function closeAddCompanyModal() {
-            document.getElementById('company-modal').classList.add('hidden');
-        }
-
-        function saveNewCompany() {
-            const name = document.getElementById('modal-company-name').value.trim();
-            if (!name) {
-                showToast("يرجى إدخال اسم الشركة على الأقل", "error");
-                return;
-            }
-
-            companiesList.push({
-                name: name,
-                cr: document.getElementById('modal-company-cr').value.trim(),
-                tax: document.getElementById('modal-company-tax').value.trim(),
-                phone: document.getElementById('modal-company-phone').value.trim(),
-                address: document.getElementById('modal-company-address').value.trim()
-            });
-
-            saveCompaniesToStorage();
-            renderCompaniesTable();
-            closeAddCompanyModal();
-            showToast("تم إضافة الشركة الجديدة بنجاح!");
-        }
-
-        // Protected Security Password Handler (Strict PIN: 2580)
-        function verifyPasswordAndExecute(actionCallback) {
+        // Protected Company Deletion
+        function deleteCompanyProtected(id) {
             Swal.fire({
-                title: 'تأكيد الحماية برقم سري',
-                text: 'يرجى إدخال الرقم السري لتأكيد عملية الحذف',
+                title: 'تأكيد الحذف برقم سري',
+                text: 'أدخل الرقم السري لحذف الشركة:',
                 input: 'password',
-                inputAttributes: {
-                    autocapitalize: 'off',
-                    placeholder: 'أدخل الرقم السري',
-                    maxlength: 10,
-                    style: 'text-align: center; font-family: monospace; font-size: 18px;'
-                },
+                inputAttributes: { maxlength: 4, placeholder: '****' },
                 showCancelButton: true,
-                confirmButtonText: 'تأكيد الحذف',
-                cancelButtonText: 'إلغاء',
-                confirmButtonColor: '#e11d48',
-                cancelButtonColor: '#64748b',
-                preConfirm: (inputPin) => {
-                    if (inputPin !== STRICT_PIN) {
-                        Swal.showValidationMessage('الرقم السري غير صحيح! يرجى إدخال الرقم الصحيح (2580)');
-                        return false;
+                confirmButtonText: 'حذف',
+                cancelButtonText: 'إلغاء'
+            }).then(async (res) => {
+                if (res.isConfirmed) {
+                    if (res.value === SECRET_PASSCODE) {
+                        await db.ref(`companies/${id}`).remove();
+                        Swal.fire('تم الحذف', 'تم حذف الشركة بنجاح', 'success');
+                    } else {
+                        Swal.fire('خطأ', 'الرقم السري غير صحيح!', 'error');
                     }
-                    return true;
-                }
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    actionCallback();
                 }
             });
         }
 
-        function promptProtectedDeleteRecord(id) {
-            verifyPasswordAndExecute(() => {
-                historyLogs = historyLogs.filter(r => r.id !== id);
-                saveHistoryToStorage();
-                renderHistoryTable();
-                updateDashboardAnalytics();
-                showToast("تم حذف عرض السعر بنجاح");
-            });
-        }
+        // 4. LEDGER TABLE RENDER & ACTIONS
+        function renderLedgerTable() {
+            const tbody = document.getElementById('ledgerTableBody');
+            tbody.innerHTML = '';
 
-        function promptProtectedDeleteCompanySales(compName) {
-            verifyPasswordAndExecute(() => {
-                historyLogs = historyLogs.filter(r => r.clientName.trim() !== compName.trim());
-                saveHistoryToStorage();
-                renderHistoryTable();
-                updateDashboardAnalytics();
-                showToast(`تم حذف جميع سجلات شركة "${compName}"`);
-            });
-        }
-
-        function promptProtectedDeleteCompany(idx) {
-            verifyPasswordAndExecute(() => {
-                companiesList.splice(idx, 1);
-                saveCompaniesToStorage();
-                renderCompaniesTable();
-                showToast("تم حذف الشركة من الدليل بنجاح");
-            });
-        }
-
-        function promptClearAllHistory() {
-            if (historyLogs.length === 0) return;
-            verifyPasswordAndExecute(() => {
-                historyLogs = [];
-                saveHistoryToStorage();
-                renderHistoryTable();
-                updateDashboardAnalytics();
-                showToast("تم مسح السجل بالكامل بنجاح");
-            });
-        }
-
-        // Single Quotation Export to Excel (.xlsx)
-        function exportSingleQuotationExcel() {
-            const clientName = document.getElementById('client-name').value.trim() || 'عرض_سعر';
-            const invoiceNum = document.getElementById('invoice-number').value;
-
-            let subtotal = 0;
-            items.forEach(i => subtotal += (i.qty || 0) * (i.price || 0));
-            const taxRate = parseFloat(document.getElementById('tax-rate-input').value) || 0;
-            const taxAmount = subtotal * (taxRate / 100);
-            const grandTotal = subtotal + taxAmount;
-
-            const sheetData = [];
-            sheetData.push(["عرض سعر رقم:", invoiceNum, "", "التاريخ:", document.getElementById('invoice-date').value]);
-            sheetData.push(["الشركة المستهدفة:", clientName, "", "السجل التجاري:", document.getElementById('client-cr').value]);
-            sheetData.push(["الرقم الضريبي:", document.getElementById('client-tax').value, "", "", ""]);
-            sheetData.push([]);
-            sheetData.push(["#", "بيان الخامات / المنتجات", "الكمية", "سعر الوحدة", "الإجمالي"]);
-
-            items.forEach((item, idx) => {
-                sheetData.push([idx + 1, item.name, item.qty, item.price, (item.qty * item.price)]);
-            });
-
-            sheetData.push([]);
-            sheetData.push(["", "", "", "المجموع الفرعي:", subtotal]);
-            sheetData.push(["", "", "", `الضريبة (${taxRate}%):`, taxAmount]);
-            sheetData.push(["", "", "", "الإجمالي النهائي:", grandTotal]);
-
-            const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "عرض السعر");
-
-            XLSX.writeFile(workbook, `عرض_سعر_${clientName}_${invoiceNum}.xlsx`);
-            showToast("تم تحميل عرض السعر كملف Excel بنجاح!");
-        }
-
-        // Export All Ledger Records to Excel
-        function exportAllLedgerExcel() {
-            if (historyLogs.length === 0) {
-                showToast("لا توجد فواتير مسجلة بالسجل لتصديرها", "error");
+            if (globalQuotes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center p-6 text-slate-400">سجل الفواتير فارغ حالياً</td></tr>';
                 return;
             }
 
-            const excelData = historyLogs.map(r => ({
-                "رقم العرض": r.invoiceNumber,
-                "التاريخ": r.date,
-                "اسم الشركة / العميل": r.clientName,
-                "السجل التجاري": r.clientCr || '-',
-                "الملف الضريبي": r.clientTax || '-',
-                "المجموع الفرعي": r.subtotal,
-                "نسبة الضريبة": `${r.taxRate}%`,
-                "قيمة الضريبة": r.taxAmount,
-                "الإجمالي النهائي": r.grandTotal
-            }));
-
-            const worksheet = XLSX.utils.json_to_sheet(excelData);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "سجل الفواتير");
-
-            XLSX.writeFile(workbook, `سجل_الفواتير_الكلي_${new Date().toISOString().slice(0,10)}.xlsx`);
-            showToast("تم تصدير سجل الإكسيل بالكامل بنجاح!");
-        }
-
-        // Export Quotation to Official PDF File
-        function exportQuotationPDF() {
-            const clientName = document.getElementById('client-name').value.trim() || 'عرض_سعر';
-            const element = document.getElementById('pdf-container');
-
-            showToast("جاري إعداد وتحميل ملف الـ PDF...");
-
-            const opt = {
-                margin:       [0.3, 0.3, 0.3, 0.3],
-                filename:     `عرض_سعر_${clientName}.pdf`,
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true },
-                jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
-            };
-
-            html2pdf().set(opt).from(element).save().then(() => {
-                showToast("تم تنزيل ملف الـ PDF بنجاح!");
+            globalQuotes.forEach(q => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-3 font-bold text-blue-600">${q.quoteNumber}</td>
+                    <td class="p-3 text-slate-600">${q.date}</td>
+                    <td class="p-3 font-bold">${q.clientCompany}</td>
+                    <td class="p-3 text-center">${q.items ? q.items.length : 0}</td>
+                    <td class="p-3 font-black text-emerald-600">${q.grandTotal ? q.grandTotal.toFixed(2) : 0.00} ج.م</td>
+                    <td class="p-3 text-center space-x-2 space-x-reverse">
+                        <button onclick="editQuote('${q.id}')" class="bg-amber-100 text-amber-800 px-2 py-1 rounded text-xs font-bold hover:bg-amber-200">تعديل</button>
+                        <button onclick="deleteQuoteProtected('${q.id}')" class="bg-rose-100 text-rose-700 px-2 py-1 rounded text-xs font-bold hover:bg-rose-200">حذف</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
             });
         }
 
-        // Reset Quotation Form
-        function resetQuotationForm() {
-            initDatesAndInvoiceNumber();
-            document.getElementById('client-name').value = '';
-            document.getElementById('client-cr').value = '';
-            document.getElementById('client-tax').value = '';
-            document.getElementById('company-select').value = '';
-            document.getElementById('tax-rate-input').value = '14';
-            items = [{ id: Date.now(), name: '', qty: 1, price: 0 }];
-            renderItemsTable();
-            calculateTotals();
-            showToast("تمت إعادة ضبط نموذج عرض السعر بنجاح");
+        // Protected Quote Delete
+        function deleteQuoteProtected(id) {
+            Swal.fire({
+                title: 'تأكيد الحذف',
+                text: 'أدخل الرقم السري لحذف هذا العرض:',
+                input: 'password',
+                confirmButtonText: 'حذف',
+                cancelButtonText: 'إلغاء'
+            }).then(async (res) => {
+                if (res.isConfirmed) {
+                    if (res.value === SECRET_PASSCODE) {
+                        await db.ref(`quotations/${id}`).remove();
+                        Swal.fire('تم الحذف', 'تم حذف عرض السعر بنجاح', 'success');
+                    } else {
+                        Swal.fire('خطأ', 'الرقم السري غير صحيح!', 'error');
+                    }
+                }
+            });
         }
 
-        // Switch Main Tabs Logic
-        function switchTab(tab) {
-            const editorTab = document.getElementById('tab-editor');
-            const dashTab = document.getElementById('tab-dashboard');
-            const historyTab = document.getElementById('tab-history');
-            const companiesTab = document.getElementById('tab-companies');
-
-            const editorBtn = document.getElementById('tab-editor-btn');
-            const dashBtn = document.getElementById('tab-dashboard-btn');
-            const historyBtn = document.getElementById('tab-history-btn');
-            const companiesBtn = document.getElementById('tab-companies-btn');
-
-            // Hide All
-            editorTab.classList.add('hidden');
-            dashTab.classList.add('hidden');
-            historyTab.classList.add('hidden');
-            companiesTab.classList.add('hidden');
-
-            const unactiveClass = "px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition bg-slate-800 hover:bg-slate-700 text-slate-300";
-            const activeClass = "px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition bg-brand-600 text-white shadow";
-
-            editorBtn.className = unactiveClass;
-            dashBtn.className = unactiveClass;
-            historyBtn.className = unactiveClass;
-            companiesBtn.className = unactiveClass;
-
-            if (tab === 'editor') {
-                editorTab.classList.remove('hidden');
-                editorBtn.className = activeClass;
-            } else if (tab === 'dashboard') {
-                dashTab.classList.remove('hidden');
-                dashBtn.className = activeClass;
-            } else if (tab === 'history') {
-                historyTab.classList.remove('hidden');
-                historyBtn.className = activeClass;
-            } else if (tab === 'companies') {
-                companiesTab.classList.remove('hidden');
-                companiesBtn.className = activeClass;
-            }
+        // Protected Clear All Ledger
+        function clearAllLedgerProtected() {
+            Swal.fire({
+                title: 'مسح السجل بالكامل!',
+                text: 'أدخل الرقم السري للعدول والتأكيد:',
+                input: 'password',
+                confirmButtonText: 'مسح الكلي',
+                cancelButtonText: 'إلغاء'
+            }).then(async (res) => {
+                if (res.isConfirmed) {
+                    if (res.value === SECRET_PASSCODE) {
+                        await db.ref('quotations').remove();
+                        Swal.fire('تم المسح', 'تم تفريغ السجل بالكامل', 'success');
+                    } else {
+                        Swal.fire('خطأ', 'الرقم السري غير صحيح!', 'error');
+                    }
+                }
+            });
         }
 
-        // Toast Helper
-        function showToast(msg, type = 'success') {
-            const toast = document.getElementById('toast-notification');
-            const toastText = document.getElementById('toast-text');
-            const toastIcon = document.getElementById('toast-icon');
+        // Edit Quote & Reload to Form
+        function editQuote(id) {
+            const q = globalQuotes.find(item => item.id === id);
+            if(!q) return;
 
-            toastText.textContent = msg;
-            if (type === 'error') {
-                toastIcon.className = "fa-solid fa-circle-exclamation text-rose-400 text-base";
+            editingQuoteId = id;
+            document.getElementById('editBadge').classList.remove('hidden');
+            document.getElementById('quoteNumber').value = q.quoteNumber;
+            document.getElementById('quoteDate').value = q.date;
+            document.getElementById('taxRate').value = q.taxRate;
+
+            // Select clients
+            const clientComp = globalCompanies.find(c => c.name === q.clientCompany);
+            if(clientComp) document.getElementById('clientCompanySelect').value = clientComp.id;
+
+            // Load Items
+            const tbody = document.getElementById('itemsTableBody');
+            tbody.innerHTML = '';
+            if(q.items && q.items.length > 0) {
+                q.items.forEach(i => addItemRow(i.name, i.qty, i.price));
             } else {
-                toastIcon.className = "fa-solid fa-circle-check text-emerald-400 text-base";
+                addItemRow();
             }
 
-            toast.classList.remove('translate-y-20', 'opacity-0');
-            setTimeout(() => {
-                toast.classList.add('translate-y-20', 'opacity-0');
-            }, 3000);
+            switchTab('create');
+            calculateTotals();
         }
 
-        function escapeHtml(str) {
-            return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        // Export Full Ledger Excel
+        function exportFullLedgerExcel() {
+            if(globalQuotes.length === 0) {
+                Swal.fire('تنبيه', 'لا توجد بيانات في السجل للتصدير', 'warning');
+                return;
+            }
+
+            const excelRows = [
+                ["رقم العرض", "التاريخ", "اسم العميل", "الشركة الموردة", "المجموع قبل الضريبة", "نسبة الضريبة", "قيمة الضريبة", "الإجمالي النهائي"]
+            ];
+
+            globalQuotes.forEach(q => {
+                excelRows.push([q.quoteNumber, q.date, q.clientCompany, q.myCompany, q.subtotal, q.taxRate + '%', q.taxAmount, q.grandTotal]);
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(excelRows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "سجل الفواتير");
+            XLSX.writeFile(wb, "سجل_عروض_الاسعار_الكامل.xlsx");
+        }
+
+        // 5. DASHBOARD CALCULATIONS & ANALYTICS
+        function renderDashboard() {
+            const totalQuotes = globalQuotes.length;
+            let totalAmount = 0;
+            const companyMap = {};
+
+            globalQuotes.forEach(q => {
+                const amount = q.grandTotal || 0;
+                totalAmount += amount;
+
+                if(!companyMap[q.clientCompany]) {
+                    companyMap[q.clientCompany] = { count: 0, total: 0 };
+                }
+                companyMap[q.clientCompany].count += 1;
+                companyMap[q.clientCompany].total += amount;
+            });
+
+            const avgQuote = totalQuotes > 0 ? (totalAmount / totalQuotes) : 0;
+            const clientCount = Object.keys(companyMap).length;
+
+            // Update KPI Cards
+            document.getElementById('dashTotalQuotes').innerText = totalQuotes;
+            document.getElementById('dashTotalAmount').innerText = totalAmount.toFixed(2) + ' ج.م';
+            document.getElementById('dashClientCount').innerText = clientCount;
+            document.getElementById('dashAvgQuote').innerText = avgQuote.toFixed(2) + ' ج.م';
+
+            // Analytics Table Render
+            const analyticsBody = document.getElementById('companyAnalyticsBody');
+            analyticsBody.innerHTML = '';
+
+            if (clientCount === 0) {
+                analyticsBody.innerHTML = '<tr><td colspan="4" class="text-center p-4 text-slate-400">لا توجد بيانات متاحة للعرض</td></tr>';
+                return;
+            }
+
+            Object.keys(companyMap).forEach(compName => {
+                const data = companyMap[compName];
+                const percentage = totalAmount > 0 ? ((data.total / totalAmount) * 100).toFixed(1) : 0;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-3 font-bold">${compName}</td>
+                    <td class="p-3 text-center"><span class="bg-blue-50 text-blue-600 px-2 py-1 rounded-full text-xs font-bold">${data.count}</span></td>
+                    <td class="p-3 font-bold text-emerald-600 text-left">${data.total.toFixed(2)} ج.م</td>
+                    <td class="p-3 text-center">
+                        <div class="flex items-center justify-center space-x-2 space-x-reverse">
+                            <span class="text-xs font-bold">${percentage}%</span>
+                            <div class="w-16 bg-slate-100 rounded-full h-2 overflow-hidden">
+                                <div class="bg-blue-600 h-2 rounded-full" style="width: ${percentage}%"></div>
+                            </div>
+                        </div>
+                    </td>
+                `;
+                analyticsBody.appendChild(tr);
+            });
         }
     </script>
 </body>
